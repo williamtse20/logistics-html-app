@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BMHK 跨境物流 3D 智慧控制塔 | Supply Chain Control Tower</title>
+
+<!-- ============ 第三方函式庫（皆為免金鑰 / 開源） ============ -->
+<!-- Tailwind CSS：版面與工具類 -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- MapLibre GL：免金鑰向量地圖引擎 -->
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<!-- Deck.gl Standalone：3D 渲染（ArcLayer / ScatterplotLayer / MapboxOverlay 橋接） -->
+<script src="https://unpkg.com/deck.gl@9.0.27/dist.min.js"></script>
+<!-- Lucide Icons：圖標庫 -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<!-- 字體：Orbitron(科技數字) + Noto Sans(CJK) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  /* ====== 全域基礎 ====== */
+  html, body { margin:0; padding:0; height:100%; overflow:hidden;
+    font-family:'Noto Sans TC','Noto Sans JP',system-ui,sans-serif; }
+  #map { position:absolute; inset:0; width:100%; height:100%; }
+  .tech-num { font-family:'Orbitron',monospace; letter-spacing:0.5px; }
+
+  /* ====== 主題 CSS 變數（4 款主題） ======
+     透過 body[data-theme] 切換，所有玻璃面板讀取這些變數 */
+  :root{
+    --glass-bg: rgba(8,15,30,0.72);
+    --glass-bg-strong: rgba(8,15,30,0.92);
+    --border: rgba(34,211,238,0.28);
+    --accent: #22d3ee;
+    --accent2: #ec4899;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --blur: 16px;
+    --radius: 14px;
+    --shadow: 0 8px 32px rgba(0,0,0,0.45);
+  }
+  /* 1) 影視暗黑科幻（預設） */
+  body[data-theme="cinematic"]{
+    --glass-bg: rgba(8,15,30,0.72); --glass-bg-strong: rgba(6,12,26,0.94);
+    --border: rgba(34,211,238,0.28); --accent:#22d3ee; --accent2:#ec4899;
+    --text:#e2e8f0; --muted:#94a3b8; --blur:16px; --radius:14px;
+  }
+  /* 2) Aurora 極光紫 */
+  body[data-theme="aurora"]{
+    --glass-bg: rgba(24,12,46,0.66); --glass-bg-strong: rgba(20,8,40,0.92);
+    --border: rgba(168,85,247,0.35); --accent:#a855f7; --accent2:#22d3ee;
+    --text:#f3e8ff; --muted:#c4b5fd; --blur:18px; --radius:18px;
+  }
+  /* 3) Apple iOS 26 液態玻璃 */
+  body[data-theme="liquid"]{
+    --glass-bg: rgba(255,255,255,0.55); --glass-bg-strong: rgba(255,255,255,0.78);
+    --border: rgba(255,255,255,0.65); --accent:#0a84ff; --accent2:#ff375f;
+    --text:#1d1d1f; --muted:#6e6e73; --blur:30px; --radius:22px;
+    --shadow: 0 10px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
+  }
+  /* 4) Konica Minolta 官網企業風 */
+  body[data-theme="konica"]{
+    --glass-bg: rgba(255,255,255,0.92); --glass-bg-strong: rgba(255,255,255,0.97);
+    --border: rgba(0,91,172,0.22); --accent:#005bac; --accent2:#e60012;
+    --text:#1a1a1a; --muted:#5a6473; --blur:8px; --radius:8px;
+    --shadow: 0 6px 24px rgba(0,40,90,0.14);
+  }
+
+  /* ====== 玻璃面板與通用元件 ====== */
+  .glass{
+    background: var(--glass-bg);
+    border:1px solid var(--border);
+    backdrop-filter: blur(var(--blur)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    color: var(--text);
+  }
+  .glass-strong{ background: var(--glass-bg-strong); }
+  .txt{ color:var(--text); }
+  .muted{ color:var(--muted); }
+  .accent-text{ color:var(--accent); }
+  .accent-bg{ background:var(--accent); }
+  .accent-border{ border-color:var(--accent); }
+
+  .chip{
+    border:1px solid var(--border); color:var(--muted);
+    border-radius:999px; transition:all .18s ease; cursor:pointer;
+    background:transparent;
+  }
+  .chip:hover{ color:var(--text); border-color:var(--accent); }
+  .chip.active{
+    background:var(--accent); color:#fff; border-color:var(--accent);
+    box-shadow:0 0 14px -2px var(--accent);
+  }
+  body[data-theme="liquid"] .chip.active,
+  body[data-theme="konica"] .chip.active{ color:#fff; }
+
+  .btn{
+    border:1px solid var(--border); color:var(--text);
+    border-radius:var(--radius); transition:all .18s ease; cursor:pointer;
+    background:var(--glass-bg);
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+
+  /* 下拉選單樣式 */
+  select.glass-select {
+    background: var(--glass-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right .7rem top 50%;
+    background-size: .65rem auto;
+  }
+  select[multiple].glass-select {
+    background-image: none;
+    padding-right: 8px;
+  }
+  select.glass-select option {
+    background: #1e293b;
+    color: #e2e8f0;
+  }
+  body[data-theme="liquid"] select.glass-select option,
+  body[data-theme="konica"] select.glass-select option {
+    background: #ffffff;
+    color: #1a1a1a;
+  }
+
+  /* 上傳拖放區 */
+  .dropzone{
+    border:2px dashed var(--border); border-radius:var(--radius);
+    transition:all .2s ease; cursor:pointer;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--accent);
+    background:color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  /* 列表項目 */
+  .list-item{
+    border:1px solid transparent; border-left:3px solid var(--accent);
+    border-radius:10px; transition:all .15s ease; cursor:pointer;
+    background:color-mix(in srgb, var(--text) 5%, transparent);
+  }
+  .list-item:hover{ background:color-mix(in srgb, var(--accent) 14%, transparent); }
+  .list-item.sel{
+    background:color-mix(in srgb, var(--accent) 22%, transparent);
+    border-color:var(--accent);
+  }
+
+  /* 捲軸美化 */
+  .scroll::-webkit-scrollbar{ width:6px; }
+  .scroll::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
+  .scroll::-webkit-scrollbar-track{ background:transparent; }
+
+  /* 右側詳情面板滑入 */
+  .drill{ transition:transform .35s cubic-bezier(.16,1,.3,1), opacity .3s; }
+  .drill.hidden-panel{ transform:translateX(120%); opacity:0; pointer-events:none; }
+
+  /* 左側面板收合（手機） */
+  .sidebar{ transition:transform .35s cubic-bezier(.16,1,.3,1); }
+  .sidebar.collapsed{ transform:translateX(-115%); }
+
+  /* KPI 卡微光動畫 */
+  @keyframes glowPulse{ 0%,100%{opacity:.5} 50%{opacity:1} }
+  .pulse-dot{ animation:glowPulse 2s ease-in-out infinite; }
+
+  /* 成功提示 Toast */
+  .toast{ transition:all .4s cubic-bezier(.16,1,.3,1); }
+  .toast.hide{ transform:translateY(-20px); opacity:0; pointer-events:none; }
+
+  /* MapLibre logo 控制（淡化） */
+  .maplibregl-ctrl-attrib{ opacity:.5; font-size:9px; }
+</style>
+</head>
+
+<body data-theme="cinematic" class="bg-black">
+
+<!-- ====================== 地圖容器 ====================== -->
+<div id="map"></div>
+
+<!-- ====================== 頂部 HUD KPI 看板 ====================== -->
+<div class="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-wrap gap-2 justify-center px-2 w-full max-w-5xl">
+  <!-- 在線總運費 -->
+  <div class="glass px-4 py-2 flex items-center gap-3 min-w-0">
+    <i data-lucide="banknote" class="w-5 h-5 accent-text shrink-0"></i>
+    <div class="leading-tight">
+      <div class="text-[10px] uppercase tracking-wider muted" data-i18n="kpiCost">總運費</div>
+      <div class="tech-num text-base sm:text-lg font-bold txt"><span id="kpiCost">0</span> <span class="text-[10px] muted">HKD</span></div>
+    </div>
+  </div>
+  <!-- 在線總貨量 -->
+  <div class="glass px-4 py-2 flex items-center gap-3">
+    <i data-lucide="package" class="w-5 h-5 accent-text shrink-0"></i>
+    <div class="leading-tight">
+      <div class="text-[10px] uppercase tracking-wider muted" data-i18n="kpiVolume">總貨量</div>
+      <div class="tech-num text-base sm:text-lg font-bold txt"><span id="kpiVol">0</span> <span class="text-[10px] muted">CBM</span></div>
+    </div>
+  </div>
+  <!-- VI 訂單數 -->
+  <div class="glass px-4 py-2 flex items-center gap-3">
+    <i data-lucide="receipt" class="w-5 h-5 accent-text shrink-0"></i>
+    <div class="leading-tight">
+      <div class="text-[10px] uppercase tracking-wider muted" data-i18n="kpiVI">VI 數</div>
+      <div class="tech-num text-base sm:text-lg font-bold txt" id="kpiVI">0</div>
+    </div>
+  </div>
+  <!-- 在線批次總數 -->
+  <div class="glass px-4 py-2 flex items-center gap-3">
+    <i data-lucide="layers-3" class="w-5 h-5 accent-text shrink-0"></i>
+    <div class="leading-tight">
+      <div class="text-[10px] uppercase tracking-wider muted" data-i18n="kpiBatch">在線批次</div>
+      <div class="tech-num text-base sm:text-lg font-bold txt" id="kpiBatch">0</div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================== 左側控制面板 ====================== -->
+<aside id="sidebar" class="sidebar glass-strong absolute top-3 left-3 z-30 w-80 max-w-[90vw] max-h-[calc(100vh-24px)] flex flex-col overflow-hidden">
+  <!-- 標題列 -->
+  <div class="px-4 pt-4 pb-3 border-b" style="border-color:var(--border)">
+    <div class="flex items-center gap-2">
+      <i data-lucide="radar" class="w-6 h-6 accent-text pulse-dot"></i>
+      <div class="min-w-0">
+        <div class="font-bold txt text-sm leading-tight" data-i18n="appTitle">BMHK 物流控制塔</div>
+        <div class="text-[10px] muted truncate" data-i18n="appSubtitle">跨境零部件供應鏈 3D 可視化</div>
+      </div>
+    </div>
+    <!-- 主題 / 語言切換 -->
+    <div class="flex items-center justify-between mt-3 gap-2">
+      <div class="flex gap-1" id="themeBtns">
+        <button data-theme-btn="cinematic" class="chip px-2 py-1 text-[10px] active" title="Cinematic">SCI-FI</button>
+        <button data-theme-btn="aurora" class="chip px-2 py-1 text-[10px]" title="Aurora">AURORA</button>
+        <button data-theme-btn="liquid" class="chip px-2 py-1 text-[10px]" title="Liquid Glass">iOS26</button>
+        <button data-theme-btn="konica" class="chip px-2 py-1 text-[10px]" title="Konica Minolta">KM</button>
+      </div>
+      <div class="flex gap-1" id="langBtns">
+        <button data-lang-btn="zh" class="chip px-2 py-1 text-[10px] active">中</button>
+        <button data-lang-btn="en" class="chip px-2 py-1 text-[10px]">EN</button>
+        <button data-lang-btn="ja" class="chip px-2 py-1 text-[10px]">日</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 可捲動內容 -->
+  <div class="scroll overflow-y-auto px-4 py-3 flex-1 space-y-4">
+
+    <!-- 拖放上傳區 -->
+    <div>
+      <div class="text-[11px] uppercase tracking-wider muted mb-2 flex items-center gap-1">
+        <i data-lucide="database" class="w-3.5 h-3.5"></i><span data-i18n="dataImport">數據導入引擎</span>
+      </div>
+      <div id="dropzone" class="dropzone px-3 py-5 text-center">
+        <i data-lucide="upload-cloud" class="w-7 h-7 mx-auto accent-text mb-1"></i>
+        <div class="text-xs txt font-medium" data-i18n="uploadTitle">拖放 CSV 檔案至此</div>
+        <div class="text-[10px] muted mt-0.5" data-i18n="uploadHint">或點擊選擇 Excel 另存的 .csv</div>
+        <input id="fileInput" type="file" accept=".csv" class="hidden" />
+      </div>
+      <button id="tplBtn" class="btn w-full mt-2 px-3 py-2 text-xs flex items-center justify-center gap-1.5">
+        <i data-lucide="file-down" class="w-3.5 h-3.5"></i><span data-i18n="downloadTemplate">下載標準 CSV 數據模板</span>
+      </button>
+    </div>
+
+    <!-- 下拉選單篩選區 -->
+    <div>
+      <div class="text-[11px] uppercase tracking-wider muted mb-2 flex items-center gap-1">
+        <i data-lucide="filter" class="w-3.5 h-3.5"></i><span data-i18n="filterTitle">多維度篩選</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <div class="text-[10px] uppercase muted mb-1" data-i18n="filterFrom">FROM</div>
+          <select id="filter-from" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer"></select>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase muted mb-1" data-i18n="filterTo">TO</div>
+          <select id="filter-to" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer"></select>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase muted mb-1" data-i18n="filterSoldTo">Sold-to</div>
+          <select id="filter-soldTo" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer"></select>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase muted mb-1" data-i18n="filterShipTo">Ship-to</div>
+          <select id="filter-shipTo" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer"></select>
+        </div>
+        <div class="col-span-2">
+          <div class="text-[10px] uppercase muted mb-1" data-i18n="filterTransCd">Trans.cd</div>
+          <select id="filter-transCd" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer"></select>
+        </div>
+        <div class="col-span-2">
+          <div class="flex justify-between items-end mb-1">
+            <div class="text-[10px] uppercase muted">ETD 月份</div>
+            <div class="text-[9px] muted">Ctrl/Cmd 多選</div>
+          </div>
+          <select id="filter-etdMonth" multiple size="3" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer scroll"></select>
+        </div>
+        <div class="col-span-2">
+          <div class="flex justify-between items-end mb-1">
+            <div class="text-[10px] uppercase muted" data-i18n="filterETD">ETD</div>
+            <div class="text-[9px] muted">Ctrl/Cmd 多選</div>
+          </div>
+          <select id="filter-etd" multiple size="4" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer scroll"></select>
+        </div>
+        <div class="col-span-2">
+          <div class="text-[10px] uppercase muted mb-1" data-i18n="filterStatus">STATUS</div>
+          <select id="filter-status" class="w-full glass-select px-2 py-1.5 text-xs outline-none cursor-pointer"></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- 定位數據矩陣列表 -->
+    <div>
+      <div class="text-[11px] uppercase tracking-wider muted mb-2 flex items-center justify-between">
+        <span class="flex items-center gap-1"><i data-lucide="list-tree" class="w-3.5 h-3.5"></i><span data-i18n="listTitle">定位數據矩陣</span></span>
+        <span class="tech-num accent-text" id="listCount">0</span>
+      </div>
+      <div id="shipList" class="space-y-1.5"></div>
+    </div>
+  </div>
+</aside>
+
+<!-- 手機收合按鈕 -->
+<button id="toggleSidebar" class="btn glass absolute top-3 left-3 z-20 p-2 sm:hidden" style="display:none">
+  <i data-lucide="panel-left-open" class="w-5 h-5"></i>
+</button>
+
+<!-- ====================== 右側詳情穿透面板 ====================== -->
+<aside id="drill" class="drill hidden-panel glass-strong absolute top-3 right-3 z-30 w-80 max-w-[90vw] max-h-[calc(100vh-24px)] flex flex-col overflow-hidden">
+  <div class="px-4 pt-4 pb-3 border-b flex items-center justify-between" style="border-color:var(--border)">
+    <div class="flex items-center gap-2 min-w-0">
+      <i data-lucide="locate-fixed" class="w-5 h-5 accent-text shrink-0"></i>
+      <span class="font-bold txt text-sm" data-i18n="detailTitle">航次詳情穿透</span>
+    </div>
+    <button id="closeDrill" class="btn p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+  </div>
+  <div id="drillBody" class="scroll overflow-y-auto px-4 py-3 flex-1 text-sm"></div>
+</aside>
+
+<!-- ====================== 圖例 ====================== -->
+<div class="glass absolute bottom-3 left-1/2 -translate-x-1/2 z-20 px-4 py-2 flex items-center gap-4 text-[11px]">
+  <span class="flex items-center gap-1.5"><span class="w-3 h-1 rounded-full" style="background:rgb(236,72,153)"></span><span data-i18n="air">空運</span></span>
+  <span class="flex items-center gap-1.5"><span class="w-3 h-1 rounded-full" style="background:rgb(34,211,238)"></span><span data-i18n="sea">海運</span></span>
+  <span class="flex items-center gap-1.5"><span class="w-3 h-1 rounded-full" style="background:rgb(34,197,94)"></span><span data-i18n="land">陸運</span></span>
+  <span class="flex items-center gap-1.5"><span class="w-3 h-1 rounded-full" style="background:rgb(239,68,68)"></span><span data-i18n="statusDelayed">延誤</span></span>
+</div>
+
+<!-- ====================== 成功提示 Toast ====================== -->
+<div id="toast" class="toast hide glass absolute top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 flex items-center gap-2 text-sm"
+     style="border-color:rgba(34,197,94,.6)">
+  <i data-lucide="check-circle-2" class="w-5 h-5" style="color:#22c55e"></i>
+  <span id="toastMsg" class="txt">上傳成功</span>
+</div>
+
+<script>
+/* =================================================================================
+   ★★★ 第一區：可維護的核心資料（物流經理可直接於此修改） ★★★
+   ================================================================================= */
+
+/* ---------- 1. 地理座標 COORDS = { 名稱: [經度, 緯度] } ---------- */
+const COORDS = {
+  "HONG KONG": [114.1694, 22.3193],
+  "NAGOYA": [136.9066, 35.1815],
+  "HOCHIMINH": [106.6297, 10.8231],
+  "WUXI": [120.3119, 31.4912],
+  "TOKYO": [139.6917, 35.6895],
+  "YANTIAN": [114.275, 22.588],
+  "BROOKS": [-111.8, 50.5],
+  "KELANG": [101.4482, 3.0333],
+  "EMMERICH": [6.2458, 51.8315],
+  "SHEKOU": [113.914, 22.484],
+  "YOKOHAMA": [139.638, 35.443],
+  "DONGGUAN": [113.751, 23.020],
+  "SHENZHEN": [114.057, 22.543],
+  "QING DAO": [120.382, 36.067],
+  "QINGDAO": [120.382, 36.067],
+  "SHANGHAI": [121.473, 31.230],
+  "MALAYSIA": [101.975, 4.210],
+  "THAILAND": [100.992, 15.870],
+  "BANGKOK": [100.500, 13.750],
+  "VIETNAM": [108.277, 14.058],
+  "JAPAN": [138.252, 36.204],
+  "KOREA": [127.766, 35.907],
+  "PENANG": [100.332, 5.416],
+  "LAEM CHABANG": [100.882, 13.082],
+  "NAN NING": [108.366, 22.817],
+  "XIA MEN": [118.089, 24.479],
+  "CHIWAN": [113.893, 22.476],
+  "HANOI": [105.834, 21.027],
+  "OSAKA": [135.502, 34.693],
+  "TOYOKAWA": [137.396, 34.823],
+  "REMIREMONT": [6.590, 48.015],
+  "CAT LAI": [106.765, 10.765],
+  "HAMBURG": [9.993, 53.551],
+  "FRANCE": [2.213, 46.227],
+  "KUALA LUMPUR": [101.686, 3.139],
+  "SUZHOU": [120.585, 31.298],
+  "CHINA": [104.195, 35.861],
+  "NARITA": [140.392, 35.772],
+  "HAI PHONG": [106.688, 20.844]
+};
+
+/* ---------- 2. 預設貨運批次資料 SHIPMENTS ---------- */
+let SHIPMENTS = [
+  {id:1, from:"HONG KONG", to:"HONG KONG", soldTo:"S7160", shipTo:"S7160002", transCd:"TR", type:"land", ctype:"-", volume:4.72, vi:"VI-25-70753", cost:0, etd:"2025-05-26", eta:"2025-05-17", status:"On Time", carrier:"-", etdMonth:"2025 5"},
+  {id:2, from:"HONG KONG", to:"NAGOYA", soldTo:"S2000", shipTo:"S2000001", transCd:"Air", type:"air", ctype:"-", volume:0.076, vi:"VI-25-80157", cost:0, etd:"2025-06-04", eta:"2025-06-04", status:"On Time", carrier:"-", etdMonth:"2025 6"},
+  {id:3, from:"HONG KONG", to:"HOCHIMINH", soldTo:"S9430", shipTo:"S9430", transCd:"SF", type:"sea", ctype:"40HQ", volume:7.175, vi:"VI-25-70832-3", cost:0, etd:"2025-06-07", eta:"2025-06-11", status:"On Time", carrier:"CMAU4732616", etdMonth:"2025 6"}
+];
+
+/* =================================================================================
+   ★★★ 第二區：多語系字典（中 / 英 / 日 即時切換） ★★★
+   ================================================================================= */
+const I18N = {
+  zh:{
+    appTitle:"BMHK 出口物流可視化", appSubtitle:"KD部品供應鏈 3D 可視化",
+    kpiCost:"總運費", kpiVolume:"總貨量", kpiVI:"VI 訂單數", kpiBatch:"在線批次",
+    dataImport:"數據導入引擎", uploadTitle:"拖放 CSV 檔案至此", uploadHint:"或點擊選擇 Excel 另存的 .csv",
+    downloadTemplate:"下載標準 CSV 數據模板",
+    filterTitle:"多維度篩選", filterFrom:"FROM", filterTo:"TO", filterSoldTo:"Sold-to", filterShipTo:"Ship-to", filterTransCd:"Trans.cd", filterETD:"ETD", filterStatus:"STATUS",
+    listTitle:"定位數據矩陣", detailTitle:"航次詳情穿透",
+    all:"全部", sea:"海運", air:"空運", land:"陸運",
+    dCarrier:"船名 / 航班 / 櫃號", dRoute:"路徑", dType:"運輸方式", dVolume:"貨量",
+    dVI:"訂單號碼", dCost:"運費", dETD:"ETD 開航", dETA:"ETA 抵達",
+    dStatus:"現時狀態", dParts:"載運部品明細", dCtype:"櫃型",
+    statusOnTime:"準時在途", statusDelayed:"延誤",
+    uploadSuccess:"成功載入 {n} 筆航線資料！", uploadFail:"CSV 解析失敗，請檢查格式",
+    noData:"目前篩選條件下無資料", selectShipment:"點擊地圖航線或左側列表以查看詳情"
+  },
+  en:{
+    appTitle:"BMHK OB Logistics Visualization", appSubtitle:"KD Parts Supply Chain 3D Visualization",
+    kpiCost:"Total Freight", kpiVolume:"Total Volume", kpiVI:"VI Orders", kpiBatch:"Active Batches",
+    dataImport:"Data Import Engine", uploadTitle:"Drag & Drop CSV Here", uploadHint:"or click to select .csv from Excel",
+    downloadTemplate:"Download Standard CSV Template",
+    filterTitle:"Multi-dimensional Filter", filterFrom:"FROM", filterTo:"TO", filterSoldTo:"Sold-to", filterShipTo:"Ship-to", filterTransCd:"Trans.cd", filterETD:"ETD", filterStatus:"STATUS",
+    listTitle:"Position Data Matrix", detailTitle:"Shipment Drill-Down",
+    all:"All", sea:"Sea", air:"Air", land:"Land",
+    dCarrier:"Vessel / Flight / Container", dRoute:"Route", dType:"Mode", dVolume:"Volume",
+    dVI:"Order No.", dCost:"Freight", dETD:"ETD", dETA:"ETA",
+    dStatus:"Status", dParts:"Loaded Components", dCtype:"Container",
+    statusOnTime:"In Transit", statusDelayed:"Delayed",
+    uploadSuccess:"Successfully loaded {n} routes!", uploadFail:"CSV parse failed, check format",
+    noData:"No data under current filters", selectShipment:"Click a route on map or list item to view details"
+  },
+  ja:{
+    appTitle:"BMHK 出口物流可視化", appSubtitle:"KD部品サプライチェーン 3D 可視化",
+    kpiCost:"総輸送費", kpiVolume:"総貨物量", kpiVI:"VI 受注数", kpiBatch:"稼働バッチ",
+    dataImport:"データ取込エンジン", uploadTitle:"CSV をここにドロップ", uploadHint:"またはクリックして .csv を選択",
+    downloadTemplate:"標準 CSV テンプレートをダウンロード",
+    filterTitle:"多次元フィルタ", filterFrom:"FROM", filterTo:"TO", filterSoldTo:"Sold-to", filterShipTo:"Ship-to", filterTransCd:"Trans.cd", filterETD:"ETD", filterStatus:"STATUS",
+    listTitle:"位置データマトリクス", detailTitle:"配送詳細ドリルダウン",
+    all:"全て", sea:"海運", air:"空運", land:"陸運",
+    dCarrier:"船名 / 便名 / コンテナ", dRoute:"ルート", dType:"輸送方式", dVolume:"貨物量",
+    dVI:"受注番号", dCost:"輸送費", dETD:"ETD 出発", dETA:"ETA 到着",
+    dStatus:"現在状態", dParts:"積載部品明細", dCtype:"コンテナ",
+    statusOnTime:"輸送中", statusDelayed:"遅延",
+    uploadSuccess:"{n} 件のルートを読込みました！", uploadFail:"CSV 解析失敗、形式を確認",
+    noData:"現在のフィルタ条件ではデータなし", selectShipment:"地図のルートまたはリストをクリックで詳細表示"
+  }
+};
+
+/* =================================================================================
+   ★★★ 第三區：全域狀態 ★★★
+   ================================================================================= */
+let LANG = "zh";
+let THEME = "cinematic";
+let FILTER = { from:"all", to:"all", soldTo:"all", shipTo:"all", transCd:"all", etd:["all"], etdMonth:["all"], status:"all" };
+let selectedId = null;
+let animTime = 0;
+let deckOverlay = null;
+let map = null;
+let currentStyle = "";
+
+const THEME_BASEMAP = {
+  cinematic:"https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+  aurora:   "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+  liquid:   "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  konica:   "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+};
+
+/* =================================================================================
+   ★★★ 第四區：輔助函數 ★★★
+   ================================================================================= */
+const t = (key) => (I18N[LANG][key] ?? key);
+const clamp = (v,min,max)=> Math.max(min, Math.min(max, v));
+const fmt = (n)=> Number(n||0).toLocaleString("en-US");
+const fmtVol = (n)=> Number(n||0).toLocaleString("en-US",{maximumFractionDigits:2});
+
+function locName(key){ return key; }
+
+function arcColor(s){
+  if(s.status==="Delayed") return [239,68,68];
+  if(s.type==="air")  return [236,72,153];
+  if(s.type==="sea")  return [34,211,238];
+  return [34,197,94];
+}
+
+function arcHeight(type){
+  return type==="air" ? 0.85 : type==="sea" ? 0.22 : 0.15;
+}
+
+function buildSeaPath(from, to){
+  const dx = to[0]-from[0], dy = to[1]-from[1];
+  const dist = Math.hypot(dx, dy);
+  const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
+  const bend = clamp(dist*0.28, 1.2, 9);
+  const ctrl = [ mid[0] + dx*0.05, mid[1] - bend ];
+  const pts = [];
+  for(let i=0;i<=24;i++){
+    const tt = i/24;
+    const x = (1-tt)*(1-tt)*from[0] + 2*(1-tt)*tt*ctrl[0] + tt*tt*to[0];
+    const y = (1-tt)*(1-tt)*from[1] + 2*(1-tt)*tt*ctrl[1] + tt*tt*to[1];
+    pts.push([x,y]);
+  }
+  return pts;
+}
+
+function prepareData(){
+  SHIPMENTS.forEach(s=>{
+    const from = COORDS[s.from], to = COORDS[s.to];
+    if(!from || !to){ s.path = null; return; }
+    s.path = (s.type==="sea") ? buildSeaPath(from,to) : [from, to];
+    if(s._offset===undefined) s._offset = Math.random();
+  });
+}
+
+function interpolate(path, p){
+  if(!path) return [0,0];
+  if(path.length===2){
+    return [ path[0][0]+(path[1][0]-path[0][0])*p,
+             path[0][1]+(path[1][1]-path[0][1])*p ];
+  }
+  const seg = p*(path.length-1);
+  const i = Math.min(Math.floor(seg), path.length-2);
+  const f = seg - i;
+  const a = path[i], b = path[i+1];
+  return [ a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f ];
+}
+
+function getFiltered(){
+  return SHIPMENTS.filter(s=>{
+    if(!s.path) return false;
+    if(FILTER.from!=="all" && s.from!==FILTER.from) return false;
+    if(FILTER.to!=="all" && s.to!==FILTER.to) return false;
+    if(FILTER.soldTo!=="all" && s.soldTo!==FILTER.soldTo) return false;
+    if(FILTER.shipTo!=="all" && s.shipTo!==FILTER.shipTo) return false;
+    if(FILTER.transCd!=="all" && s.transCd!==FILTER.transCd) return false;
+    
+    if(FILTER.etdMonth && !FILTER.etdMonth.includes("all") && FILTER.etdMonth.length > 0){
+        if(!FILTER.etdMonth.includes(s.etdMonth)) return false;
+    }
+
+    if(FILTER.etd && !FILTER.etd.includes("all") && FILTER.etd.length > 0){
+        const etd = (s.etd||"").slice(0,10);
+        const match = FILTER.etd.some(v => etd.startsWith(v));
+        if(!match) return false;
+    }
+
+    if(FILTER.status!=="all" && s.status!==FILTER.status) return false;
+    return true;
+  });
+}
+
+/* =================================================================================
+   ★★★ 第五區：地圖與 Deck.gl 圖層 ★★★
+   ================================================================================= */
+function initMap(){
+  currentStyle = THEME_BASEMAP[THEME];
+  map = new maplibregl.Map({
+    container:"map",
+    style: currentStyle,
+    center:[114, 19],
+    zoom:3.2, pitch:48, bearing:-8,
+    attributionControl:{compact:true}
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:true}), "bottom-right");
+
+  deckOverlay = new deck.MapboxOverlay({ interleaved:false, layers:[] });
+  map.addControl(deckOverlay);
+
+  map.on("load", ()=>{ updateLayers(); startAnim(); });
+  map.on("style.load", ()=> updateLayers());
+}
+
+function updateLayers(){
+  if(!deckOverlay) return;
+  const data = getFiltered();
+
+  const arcLayer = new deck.ArcLayer({
+    id:"arc-layer", data, pickable:true, greatCircle:false,
+    getSourcePosition: d=> COORDS[d.from],
+    getTargetPosition: d=> COORDS[d.to],
+    getSourceColor: d=> { const c=arcColor(d); return [...c, clamp(120+d.volume*5,120,255)]; },
+    getTargetColor: d=> { const c=arcColor(d); return [...c, clamp(120+d.volume*5,120,255)]; },
+    getHeight: d=> arcHeight(d.type),
+    getWidth: d=> clamp(d.volume/5, 1.5, 8),
+    widthMinPixels:1.5,
+    updateTriggers:{ getWidth:[data], getSourceColor:[data] },
+    onClick: info=>{ if(info.object) openDetail(info.object.id, true); }
+  });
+
+  const particles = data.map(s=>{
+    const factor = s.type==="air" ? 0.0011 : s.type==="sea" ? 0.00030 : 0.00055;
+    const phase = (animTime*factor + s._offset) % 1;
+    return {
+      id:s.id, type:s.type,
+      position: interpolate(s.path, phase),
+      color: arcColor(s),
+      radius: clamp(s.volume/2, 4.5, 20)
+    };
+  });
+
+  const glowLayer = new deck.ScatterplotLayer({
+    id:"glow-layer", data:particles,
+    getPosition:d=>d.position,
+    getFillColor:d=>[...d.color, 70],
+    getRadius:d=>d.radius*2.4,
+    radiusUnits:"pixels", radiusMinPixels:6, radiusMaxPixels:60,
+    updateTriggers:{ getPosition:[animTime] }
+  });
+
+  const coreLayer = new deck.ScatterplotLayer({
+    id:"core-layer", data:particles, pickable:true,
+    getPosition:d=>d.position,
+    getFillColor:d=>[...d.color, 255],
+    getLineColor:[255,255,255,220], lineWidthMinPixels:1, stroked:true,
+    getRadius:d=>d.radius,
+    radiusUnits:"pixels", radiusMinPixels:3, radiusMaxPixels:28,
+    updateTriggers:{ getPosition:[animTime] },
+    onClick: info=>{ if(info.object) openDetail(info.object.id, true); }
+  });
+
+  deckOverlay.setProps({ layers:[arcLayer, glowLayer, coreLayer] });
+}
+
+function startAnim(){
+  function frame(){
+    animTime += 1;
+    updateLayers();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* =================================================================================
+   ★★★ 第六區：UI 渲染（KPI / 篩選器 / 列表 / 詳情） ★★★
+   ================================================================================= */
+
+function renderKPI(){
+  const data = getFiltered();
+  const totalCost = data.reduce((a,s)=>a+(s.cost||0),0);
+  const totalVol  = data.reduce((a,s)=>a+(s.volume||0),0);
+  const viSet = new Set(data.map(s=>s.vi).filter(Boolean));
+  document.getElementById("kpiCost").textContent  = fmt(totalCost);
+  document.getElementById("kpiVol").textContent   = fmtVol(totalVol);
+  document.getElementById("kpiVI").textContent    = viSet.size;
+  document.getElementById("kpiBatch").textContent = data.length;
+}
+
+function populateDropdown(id, field, filterKey) {
+  const select = document.getElementById(id);
+  const currentVal = FILTER[filterKey];
+  select.innerHTML = '';
+  
+  let uniqueVals = [];
+  if(field === 'etd') {
+      let etds = SHIPMENTS.map(s => (s[field]||"").slice(0,10)).filter(Boolean);
+      uniqueVals = [...new Set(etds)].sort();
+  } else {
+      uniqueVals = [...new Set(SHIPMENTS.map(s => s[field]).filter(Boolean))].sort();
+  }
+
+  const optAll = document.createElement("option");
+  optAll.value = "all";
+  optAll.textContent = t("all");
+  if (Array.isArray(currentVal) ? currentVal.includes("all") : currentVal === "all") {
+      optAll.selected = true;
+  }
+  select.appendChild(optAll);
+
+  uniqueVals.forEach(val => {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = val;
+    if (Array.isArray(currentVal) ? currentVal.includes(val) : val === currentVal) {
+        opt.selected = true;
+    }
+    select.appendChild(opt);
+  });
+  
+  select.onchange = (e) => {
+    if (select.multiple) {
+        const selected = Array.from(e.target.selectedOptions).map(o => o.value);
+        FILTER[filterKey] = selected.length ? selected : ["all"];
+    } else {
+        FILTER[filterKey] = e.target.value;
+    }
+    refresh();
+  };
+}
+
+function renderFilters(){
+  populateDropdown("filter-from", "from", "from");
+  populateDropdown("filter-to", "to", "to");
+  populateDropdown("filter-soldTo", "soldTo", "soldTo");
+  populateDropdown("filter-shipTo", "shipTo", "shipTo");
+  populateDropdown("filter-transCd", "transCd", "transCd");
+  populateDropdown("filter-etdMonth", "etdMonth", "etdMonth");
+  populateDropdown("filter-etd", "etd", "etd");
+  populateDropdown("filter-status", "status", "status");
+}
+
+function typeIcon(type){ return type==="air"?"plane":type==="sea"?"ship":"truck"; }
+
+function renderList(){
+  const data = getFiltered();
+  const box = document.getElementById("shipList");
+  document.getElementById("listCount").textContent = data.length;
+  box.innerHTML = "";
+  if(data.length===0){
+    box.innerHTML = `<div class="text-[11px] muted text-center py-4">${t("noData")}</div>`;
+    return;
+  }
+  data.forEach(s=>{
+    const c = arcColor(s);
+    const el = document.createElement("div");
+    el.className = "list-item px-2.5 py-2" + (selectedId===s.id?" sel":"");
+    el.style.borderLeftColor = `rgb(${c[0]},${c[1]},${c[2]})`;
+    el.innerHTML = `
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <i data-lucide="${typeIcon(s.type)}" class="w-3.5 h-3.5 shrink-0" style="color:rgb(${c[0]},${c[1]},${c[2]})"></i>
+          <span class="text-xs font-semibold txt truncate">${s.carrier}</span>
+        </div>
+        ${s.status==="Delayed"?`<span class="text-[9px] px-1.5 py-0.5 rounded-full text-white shrink-0" style="background:#ef4444">${t("statusDelayed")}</span>`:``}
+      </div>
+      <div class="flex items-center justify-between mt-1 text-[10px] muted">
+        <span class="truncate">${locName(s.from)} → ${locName(s.to)}</span>
+      </div>
+      <div class="flex items-center justify-between mt-1 text-[10px]">
+        <span class="tech-num accent-text">${fmtVol(s.volume)} CBM</span>
+        <span class="muted">${s.vi}</span>
+      </div>`;
+    el.onclick = ()=> openDetail(s.id, true);
+    box.appendChild(el);
+  });
+  lucide.createIcons();
+}
+
+function renderDetail(){
+  const body = document.getElementById("drillBody");
+  if(selectedId===null){
+    body.innerHTML = `<div class="muted text-xs text-center py-8 flex flex-col items-center gap-2">
+      <i data-lucide="mouse-pointer-click" class="w-8 h-8 opacity-50"></i>${t("selectShipment")}</div>`;
+    lucide.createIcons();
+    return;
+  }
+  const s = SHIPMENTS.find(x=>x.id===selectedId);
+  if(!s) return;
+  const c = arcColor(s);
+  const row = (icon,label,val,extra="")=>`
+    <div class="flex items-start gap-2.5 py-2 border-b" style="border-color:var(--border)">
+      <i data-lucide="${icon}" class="w-4 h-4 mt-0.5 accent-text shrink-0"></i>
+      <div class="min-w-0 flex-1">
+        <div class="text-[10px] uppercase tracking-wider muted">${label}</div>
+        <div class="text-sm txt font-medium break-words ${extra}">${val}</div>
+      </div>
+    </div>`;
+  const statusBadge = s.status==="Delayed"
+    ? `<span class="px-2 py-0.5 rounded-full text-white text-xs" style="background:#ef4444">${t("statusDelayed")}</span>`
+    : `<span class="px-2 py-0.5 rounded-full text-white text-xs" style="background:#22c55e">${t("statusOnTime")}</span>`;
+
+  body.innerHTML = `
+    <div class="flex items-center gap-2 mb-3 p-2.5 rounded-lg" style="background:color-mix(in srgb, rgb(${c[0]},${c[1]},${c[2]}) 16%, transparent)">
+      <i data-lucide="${typeIcon(s.type)}" class="w-6 h-6" style="color:rgb(${c[0]},${c[1]},${c[2]})"></i>
+      <div class="min-w-0">
+        <div class="text-sm font-bold txt truncate">${s.carrier}</div>
+        <div class="text-[10px] muted">${s.transCd} · ${s.ctype||"-"}</div>
+      </div>
+    </div>
+    ${row("git-compare-arrows", t("dRoute"), `${locName(s.from)} <span class="muted">→</span> ${locName(s.to)}`)}
+    ${row("user", "Sold-to / Ship-to", `${s.soldTo} / ${s.shipTo}`)}
+    ${row("box", t("dVolume"), `<span class="tech-num">${fmtVol(s.volume)}</span> CBM`)}
+    ${row("hash", t("dVI"), s.vi)}
+    ${row("container", t("dCtype"), s.ctype||"-")}
+    ${row("calendar-arrow-up", t("dETD"), s.etd||"-")}
+    ${row("calendar-check", t("dETA"), s.eta||"-")}
+    ${row("activity", t("dStatus"), statusBadge)}
+  `;
+  lucide.createIcons();
+}
+
+function openDetail(id, fly){
+  selectedId = id;
+  const panel = document.getElementById("drill");
+  panel.classList.remove("hidden-panel");
+  renderDetail();
+  renderList();
+  if(fly){
+    const s = SHIPMENTS.find(x=>x.id===id);
+    if(s && s.path){
+      const factor = s.type==="air"?0.0011:s.type==="sea"?0.00030:0.00055;
+      const phase = (animTime*factor + s._offset) % 1;
+      const pos = interpolate(s.path, phase);
+      map.easeTo({ center:pos, zoom:5.2, pitch:55, duration:1600, essential:true });
+    }
+  }
+}
+
+function refresh(){
+  renderKPI();
+  renderFilters();
+  renderList();
+  updateLayers();
+  lucide.createIcons();
+}
+
+/* =================================================================================
+   ★★★ 第七區：CSV 解析引擎 ★★★
+   ================================================================================= */
+
+function parseCSVLine(line){
+  const res=[]; let cur=""; let q=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='"'){
+      if(q && line[i+1]==='"'){ cur+='"'; i++; }
+      else q=!q;
+    } else if(ch===',' && !q){ res.push(cur); cur=""; }
+    else cur+=ch;
+  }
+  res.push(cur);
+  return res.map(x=>x.trim());
+}
+
+function detectField(header){
+  const h = header.toLowerCase();
+  const has = (...keys)=> keys.some(k=> h.includes(k.toLowerCase()));
+  
+  if(has("sold-to","soldto")) return "soldTo";
+  if(has("ship-to","shipto")) return "shipTo";
+  if(has("from","起點")) return "from";
+  if(has("to","終點")) return "to";
+  if(has("trans.cd","transcd","type","運輸方式")) return "transCd";
+  if(has("etd 月份", "etd月份", "etd month")) return "etdMonth";
+  if(has("etd")) return "etd";
+  if(has("eta")) return "eta";
+  if(has("status","狀態")) return "status";
+  if(has("volume","cbm","貨量")) return "volume";
+  if(has("vanning","vi","instruction")) return "vi";
+  if(has("container no","container")) return "carrier";
+  if(has("size of container","size")) return "ctype";
+  
+  return null;
+}
+
+function normType(v){
+  const s=(v||"").toLowerCase();
+  if(s.includes("air")) return "air";
+  if(s.includes("sf") || s.includes("sea")) return "sea";
+  return "land"; // TR or others
+}
+
+function normStatus(v){
+  const s=(v||"").toLowerCase();
+  if(s.includes("delay")||s.includes("延")||s.includes("遅")) return "Delayed";
+  return "On Time";
+}
+
+function matchLocation(v){
+  if(!v) return null;
+  const val=v.trim().toUpperCase();
+  if(COORDS[val]) return val;
+  const keys=Object.keys(COORDS);
+  let k=keys.find(x=>x.replace(/\s/g,"")===val.replace(/\s/g,""));
+  if(k) return k;
+  k=keys.find(x=> x.includes(val)||val.includes(x));
+  return k||val; // Fallback to raw value if not found, map might not show it but data will exist
+}
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.replace(/\r/g,"").split("\n").filter(l=>l.trim().length>0);
+  if(lines.length<2) throw new Error("empty");
+
+  const headers = parseCSVLine(lines[0]);
+  const fieldIdx = {};
+  headers.forEach((h,i)=>{ const f=detectField(h); if(f && fieldIdx[f]===undefined) fieldIdx[f]=i; });
+  if(fieldIdx.from===undefined || fieldIdx.to===undefined) throw new Error("no from/to");
+
+  const out=[];
+  for(let r=1;r<lines.length;r++){
+    const cols = parseCSVLine(lines[r]);
+    const get=(f)=> fieldIdx[f]!==undefined ? (cols[fieldIdx[f]]||"") : "";
+    
+    const rawFrom = get("from");
+    const rawTo = get("to");
+    if(!rawFrom || !rawTo) continue;
+    
+    const from = matchLocation(rawFrom);
+    const to   = matchLocation(rawTo);
+    
+    // Add missing coordinates dynamically if possible, else skip map drawing for them
+    if(!COORDS[from]) COORDS[from] = [114, 22]; // Default fallback
+    if(!COORDS[to]) COORDS[to] = [114, 22];
+
+    out.push({
+      id: r,
+      from, to,
+      soldTo: get("soldTo") || "-",
+      shipTo: get("shipTo") || "-",
+      transCd: get("transCd") || "-",
+      carrier: get("carrier") || `BATCH-${r}`,
+      type: normType(get("transCd")),
+      ctype: get("ctype") || "-",
+      volume: parseFloat((get("volume")||"0").replace(/[^\d.]/g,""))||0,
+      vi: get("vi") || "-",
+      cost: 0,
+      etd: get("etd"), eta: get("eta"),
+      etdMonth: get("etdMonth") || "-",
+      status: normStatus(get("status")),
+      _offset: Math.random()
+    });
+  }
+  if(out.length===0) throw new Error("no valid rows");
+  return out;
+}
+
+function handleFile(file){
+  if(!file || !/\.csv$/i.test(file.name)){ showToast(t("uploadFail"), false); return; }
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const arr = parseCSV(e.target.result);
+      SHIPMENTS = arr;
+      selectedId = null;
+      FILTER = { from:"all", to:"all", soldTo:"all", shipTo:"all", transCd:"all", etd:["all"], etdMonth:["all"], status:"all" };
+      document.getElementById("drill").classList.add("hidden-panel");
+      prepareData();
+      refresh();
+      showToast(t("uploadSuccess").replace("{n}", arr.length), true);
+    }catch(err){
+      showToast(t("uploadFail"), false);
+      console.error(err);
+    }
+  };
+  reader.readAsText(file, "UTF-8");
+}
+
+function downloadTemplate(){
+  const tpl =
+`FROM,TO,Sold-to,Ship-to,Vanning instruction no,Volume,Trans.cd,Size of Container,Container no,BillOfLad1,BillOfLad2,ETD,ETA,STATUS,ETD 月份
+HONG KONG,HONG KONG,S7160,S7160002,VI-25-70753,4.72,TR,,,VI-25-70753,,2025-05-26 00:00:00,2025-05-17 00:00:00,normal,2025 5
+HONG KONG,NAGOYA,S2000,S2000001,VI-25-80157,0.076,Air,,,YHK05778172,160HKG95243875,2025-06-04 00:00:00,2025-06-04 00:00:00,normal,2025 6
+HONG KONG,HOCHIMINH,S9430,S9430,VI-25-70832-3,7.175,SF,40HQ,CMAU4732616,HKG1202826,,2025-06-07 00:00:00,2025-06-11 00:00:00,normal,2025 6`;
+  const blob = new Blob(["\uFEFF"+tpl], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "BMHK_Template.csv";
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+function showToast(msg, ok){
+  const toast = document.getElementById("toast");
+  document.getElementById("toastMsg").textContent = msg;
+  toast.style.borderColor = ok ? "rgba(34,197,94,.6)" : "rgba(239,68,68,.6)";
+  toast.querySelector("i").setAttribute("data-lucide", ok?"check-circle-2":"alert-triangle");
+  toast.querySelector("i").style.color = ok ? "#22c55e" : "#ef4444";
+  lucide.createIcons();
+  toast.classList.remove("hide");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=> toast.classList.add("hide"), 3200);
+}
+
+/* =================================================================================
+   ★★★ 第八區：主題 / 語言切換 ★★★
+   ================================================================================= */
+function setTheme(name){
+  THEME = name;
+  document.body.dataset.theme = name;
+  document.querySelectorAll("[data-theme-btn]").forEach(b=>
+    b.classList.toggle("active", b.dataset.themeBtn===name));
+  const styleUrl = THEME_BASEMAP[name];
+  if(styleUrl !== currentStyle){
+    currentStyle = styleUrl;
+    map.setStyle(styleUrl);
+  }
+}
+
+function applyI18n(){
+  document.querySelectorAll("[data-i18n]").forEach(el=>{
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-lang-btn]").forEach(b=>
+    b.classList.toggle("active", b.dataset.langBtn===LANG));
+  refresh();
+  renderDetail();
+}
+
+function setLang(l){ LANG=l; applyI18n(); }
+
+/* =================================================================================
+   ★★★ 第九區：事件綁定與啟動 ★★★
+   ================================================================================= */
+function bindEvents(){
+  document.querySelectorAll("[data-theme-btn]").forEach(b=>
+    b.onclick = ()=> setTheme(b.dataset.themeBtn));
+  document.querySelectorAll("[data-lang-btn]").forEach(b=>
+    b.onclick = ()=> setLang(b.dataset.langBtn));
+
+  const dz = document.getElementById("dropzone");
+  const fi = document.getElementById("fileInput");
+  dz.onclick = ()=> fi.click();
+  fi.onchange = (e)=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+  ["dragenter","dragover"].forEach(ev=> dz.addEventListener(ev, e=>{
+    e.preventDefault(); e.stopPropagation(); dz.classList.add("drag"); }));
+  ["dragleave","drop"].forEach(ev=> dz.addEventListener(ev, e=>{
+    e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag"); }));
+  dz.addEventListener("drop", e=>{
+    if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+  document.getElementById("tplBtn").onclick = downloadTemplate;
+
+  document.getElementById("closeDrill").onclick = ()=>{
+    selectedId=null;
+    document.getElementById("drill").classList.add("hidden-panel");
+    renderList();
+  };
+
+  const sidebar = document.getElementById("sidebar");
+  const toggle = document.getElementById("toggleSidebar");
+  function checkMobile(){
+    if(window.innerWidth < 640){
+      toggle.style.display="block";
+    } else {
+      toggle.style.display="none";
+      sidebar.classList.remove("collapsed");
+    }
+  }
+  toggle.onclick = ()=> sidebar.classList.toggle("collapsed");
+  window.addEventListener("resize", checkMobile);
+  checkMobile();
+}
+
+/* ====== 啟動 ====== */
+window.addEventListener("DOMContentLoaded", ()=>{
+  prepareData();
+  initMap();
+  bindEvents();
+  applyI18n();
+  lucide.createIcons();
+});
+</script>
+</body>
+</html>
